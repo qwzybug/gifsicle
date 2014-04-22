@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <unistd.h>
 
 const char *program_name = "gifdisplay";
 
@@ -139,7 +140,6 @@ typedef struct {
   uint8_t *scratchData;
   unsigned int frame;
   int nextFrameWait;
-  // void (*handler)(struct *);
 } Gif_Renderer;
 
 typedef void (*Gif_Handler)(Gif_Renderer *);
@@ -151,10 +151,9 @@ Gif_Renderer *Gif_RendererCreate(Gif_Stream *gfs) {
   
   int width = Gif_ScreenWidth(gfs);
   int height = Gif_ScreenHeight(gfs);
-  printf("Creating GIF renderer of size %d x %d", width, height);
   
-  renderer->imageData = calloc(width * height, sizeof(uint8_t));
-  renderer->scratchData = calloc(width * height, sizeof(uint8_t));
+  renderer->imageData = calloc(width * height * 3, sizeof(uint8_t));
+  renderer->scratchData = calloc(width * height * 3, sizeof(uint8_t));
   
   memset(renderer->imageData, GIF_BACKGROUND, width * height * 3);
   memset(renderer->scratchData, GIF_BACKGROUND, width * height * 3);
@@ -200,14 +199,18 @@ void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
   uint8_t isTransparent = 0;
   uint8_t r, g, b;
   
+  int width = Gif_ScreenWidth(gr->gfs);
+  int height = Gif_ScreenHeight(gr->gfs);
+  
   for (int y = 0; y < img->height; y++) {
     for (int x = 0; x < img->width; x++) {
       int xpx = x + img->left;
       int ypx = y + img->top;
-      if (xpx >= img->width || ypx >= img->top) {
+      
+      if (xpx >= width || ypx >= height) {
         isTransparent = 1;
       } else {
-        Gif_Color col = Gif_GetColor(gr->gfs, img, xpx, ypx, &isTransparent);
+        Gif_Color col = Gif_GetColor(gr->gfs, img, x, y, &isTransparent);
         r = col.gfc_red;
         g = col.gfc_green;
         b = col.gfc_blue;
@@ -216,21 +219,21 @@ void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
       if (isTransparent)
       {
         // use last rendered pixel at this location
-        Gif_RendererGetPixel(gr, gr->scratchData, x, y, &r, &g, &b);
+        Gif_RendererGetPixel(gr, gr->scratchData, xpx, ypx, &r, &g, &b);
       }
       
-      Gif_RendererSetPixel(gr, gr->imageData, x, y, r, g, b);
+      Gif_RendererSetPixel(gr, gr->imageData, xpx, ypx, r, g, b);
       
-      // manage image disposal into scratch buffer
       switch (img->disposal) {
-        case GIF_DISPOSAL_NONE:
         case GIF_DISPOSAL_ASIS:
           // set scratch to current value
-          Gif_RendererSetPixel(gr, gr->scratchData, x, y, r, g, b);
+          Gif_RendererSetPixel(gr, gr->scratchData, xpx, ypx, r, g, b);
           break;
         case GIF_DISPOSAL_BACKGROUND:
-          Gif_RendererSetPixel(gr, gr->scratchData, x, y, GIF_BACKGROUND, GIF_BACKGROUND, GIF_BACKGROUND);
+          // set scratch to background
+          Gif_RendererSetPixel(gr, gr->scratchData, xpx, ypx, GIF_BACKGROUND, GIF_BACKGROUND, GIF_BACKGROUND);
           break;
+        case GIF_DISPOSAL_NONE:
         case GIF_DISPOSAL_PREVIOUS:
         default:
           // nothing
@@ -245,10 +248,82 @@ void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
   gr->frame = (gr->frame + 1) % Gif_ImageCount(gr->gfs);
 }
 
+/**
+ * Some GIF handlers
+ */
+
+// scale and crop the gif to a given size, output bitmaps
+void scaleCropHandler(Gif_Renderer *gr) {
+  int sz = 128;
+  
+  int width = Gif_ScreenWidth(gr->gfs);
+  int height = Gif_ScreenHeight(gr->gfs);
+  
+  int minD = MIN(width, height);
+  int dx = (width  - minD) / 2;
+  int dy = (height - minD) / 2;
+  
+  float scale = (float)sz / minD;
+  
+  BMP bitmap = BMPCreate(sz, sz);
+  
+  uint8_t r, g, b;
+  for (int y = 0; y < sz; y++) {
+    for (int x = 0; x < sz; x++) {
+      int ypx = dy + y / scale;
+      int xpx = dx + x / scale;
+      
+      Gif_RendererGetPixel(gr, gr->imageData, xpx, ypx, &r, &g, &b);
+      BMPSetPixel(bitmap, x, y, r, g, b);
+    }
+  }
+  char fname[128];
+  sprintf(fname, "out/%d.bmp", gr->frame);
+  BMPWrite(bitmap, fname);
+  
+  BMPRelease(bitmap);
+}
+
+// render the whole gif to bitmaps
+void simpleHandler(Gif_Renderer *gr) {
+  int width = Gif_ScreenWidth(gr->gfs);
+  int height = Gif_ScreenHeight(gr->gfs);
+  
+  BMP bitmap = BMPCreate(width, height);
+  
+  uint8_t r, g, b;
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      Gif_RendererGetPixel(gr, gr->imageData, x, y, &r, &g, &b);
+      BMPSetPixel(bitmap, x, y, r, g, b);
+    }
+  }
+  char fname[128];
+  sprintf(fname, "out/%d.bmp", gr->frame);
+  BMPWrite(bitmap, fname);
+  BMPRelease(bitmap);
+}
+
+
+static int stop = 0;
+
+void sig_handler(int signo)
+{
+  if (signo == SIGINT)
+  {
+    printf("STOPPING\n");
+    stop = 1;
+  }
+}
+
 int main(int argc, char *argv[])
 {
   unsigned int sz = 128;
   uint8_t bg = 0xB3; // Netscape gray
+  
+  // handle SIGINT
+  if (signal(SIGINT, sig_handler) == SIG_ERR)
+    printf("Can't handle SIGINT\n");
   
   if (argc != 2)
   {
@@ -273,79 +348,12 @@ int main(int argc, char *argv[])
   
   printf("Displaying %s\n(%d x %d, %d frames)\n", name, Gif_ScreenWidth(gfs), Gif_ScreenHeight(gfs), Gif_ImageCount(gfs));
   
-  int minD = MIN(Gif_ScreenWidth(gfs), Gif_ScreenHeight(gfs));
-  
-  float scale = (float)sz / minD;
-  
-  int dx = (Gif_ScreenWidth(gfs)  - minD) / 2;
-  int dy = (Gif_ScreenHeight(gfs) - minD) / 2;
-  
-  BMP bitmap = BMPCreate(sz, sz);
-  BMP scratch = BMPCreate(sz, sz);
-  
-  BMPFill(bitmap, bg, bg, bg);
-  BMPFill(scratch, bg, bg, bg);
-  
-  for (int i = 0; i < Gif_ImageCount(gfs); i++)
-  {
-    Gif_Image *img = Gif_GetImage(gfs, i);
-    printf("Frame %d: %.02fs %d x %d (%d, %d) (disposal %d)\n", i, img->delay / 100.0, img->width, img->height, img->left, img->top, img->disposal);
-    
-    uint8_t isTransparent = 0;
-    uint8_t r, g, b;
-    
-    for (int y = 0; y < sz; y++)
-    {
-      for (int x = 0; x < sz; x++)
-      {
-        int ypx = dy + y / scale - img->top;
-        int xpx = dx + x / scale - img->left;
-        
-        if (ypx < 0 || ypx >= img->height ||
-            xpx < 0 || xpx >= img->width) {
-          isTransparent = 1;
-        }
-        else
-        {
-          Gif_Color col = Gif_GetColor(gfs, img, xpx, ypx, &isTransparent);
-          r = col.gfc_red;
-          g = col.gfc_green;
-          b = col.gfc_blue;
-        }
-        
-        if (isTransparent)
-        {
-          // use last rendered pixel at this location
-          BMPGetPixel(scratch, x, y, &r, &g, &b);
-        }
-        
-        BMPSetPixel(bitmap, x, y, r, g, b);
-        
-        // manage image disposal into scratch buffer
-        switch (img->disposal) {
-          case GIF_DISPOSAL_NONE:
-          case GIF_DISPOSAL_ASIS:
-            // set scratch to current value
-            BMPSetPixel(scratch, x, y, r, g, b);
-            break;
-          case GIF_DISPOSAL_BACKGROUND:
-            BMPSetPixel(scratch, x, y, 0xB3, 0xB3, 0xB3);
-            break;
-          case GIF_DISPOSAL_PREVIOUS:
-          default:
-            // nothing
-            break;
-        };
-      }
-    }
-    
-    char fname[128];
-    sprintf(fname, "out/%d.bmp", i);
-    BMPWrite(bitmap, fname);
+  int ms_per_tick = 5;
+  Gif_Renderer *gr = Gif_RendererCreate(gfs);
+  while (!stop) {
+    Gif_RendererTick(gr, ms_per_tick, scaleCropHandler);
+    usleep(ms_per_tick * 1000);
   }
-  
-  BMPRelease(bitmap);
-  BMPRelease(scratch);
   
   exit(0);
 }
