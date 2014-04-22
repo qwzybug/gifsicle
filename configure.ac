@@ -127,6 +127,14 @@ else
 fi
 AC_SUBST(GIFWRITE_O)
 
+
+dnl
+dnl Set up `gifdisplay' support
+dnl
+
+  OTHERPROGRAMS="$OTHERPROGRAMS gifdisplay"'$(EXEEXT)'
+
+
 dnl
 dnl random or rand, strerror, strtoul, mkstemp, sys/select.h
 dnl

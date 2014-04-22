@@ -24,6 +24,7 @@ missing
 src/gifdiff
 src/gifsicle
 src/gifview
+src/gifdisplay
 stamp-h*
 ungifsicle-*.rpm
 ungifsicle-*.tar.gz

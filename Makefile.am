@@ -16,6 +16,8 @@ gifdiff:
 	@cd src && $(MAKE) gifdiff
 gifview:
 	@cd src && $(MAKE) gifview
+gifdisplay:
+	@cd src && $(MAKE) gifdisplay
 
 srclinks:
 	cd $(top_srcdir); sh ./sourcecheckout.sh

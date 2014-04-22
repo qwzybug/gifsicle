@@ -2,14 +2,16 @@
 AUTOMAKE_OPTIONS = foreign check-news
 
 bin_PROGRAMS = gifsicle @OTHERPROGRAMS@
-EXTRA_PROGRAMS = gifview gifdiff
+EXTRA_PROGRAMS = gifview gifdiff gifdisplay
 
 LDADD = @LIBOBJS@
 gifsicle_LDADD = $(LDADD) @GIFWRITE_O@
 gifview_LDADD = $(LDADD) @X_LIBS@ @X_PRE_LIBS@ -lX11 @X_EXTRA_LIBS@
+gifdisplay_LDADD = $(LDADD)
 
 gifsicle_DEPENDENCIES = @GIFWRITE_O@ @LIBOBJS@
 gifview_DEPENDENCIES = @LIBOBJS@
+gifdisplay_DEPENDENCIES = @LIBOBJS@
 gifdiff_DEPENDENCIES = @LIBOBJS@
 
 WERROR = @WERROR@
@@ -23,6 +25,9 @@ gifsicle_SOURCES = clp.c fmalloc.c \
 gifview_SOURCES = clp.c fmalloc.c \
 		giffunc.c gifread.c gifx.c \
 		gifview.c
+
+gifdisplay_SOURCES = clp.c fmalloc.c \
+		giffunc.c gifread.c	gifdisplay.c
 
 gifdiff_SOURCES = clp.c fmalloc.c \
 		giffunc.c gifread.c \
