@@ -171,9 +171,9 @@ void Gif_RendererSetPixel(Gif_Renderer *gr, uint8_t *buf, int x, int y, uint8_t 
   if (x < 0 || x >= width || y < 0 || y >= height)
     return;
   
-  buf[y * width + x]     = r;
-  buf[y * width + x + 1] = g;
-  buf[y * width + x + 2] = b;
+  buf[y * width * 3 + x * 3]     = r;
+  buf[y * width * 3 + x * 3 + 1] = g;
+  buf[y * width * 3 + x * 3 + 2] = b;
 }
 
 void Gif_RendererGetPixel(Gif_Renderer *gr, uint8_t *buf, int x, int y, uint8_t *r, uint8_t *g, uint8_t *b) {
@@ -183,9 +183,9 @@ void Gif_RendererGetPixel(Gif_Renderer *gr, uint8_t *buf, int x, int y, uint8_t 
   if (x < 0 || x >= width || y < 0 || y >= height)
     return;
   
-  *r = buf[y * width + x];
-  *g = buf[y * width + x + 1];
-  *b = buf[y * width + x + 2];
+  *r = buf[y * width * 3 + x * 3];
+  *g = buf[y * width * 3 + x * 3 + 1];
+  *b = buf[y * width * 3 + x * 3 + 2];
 }
 
 void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
