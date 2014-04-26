@@ -35,19 +35,29 @@ Gif_Color Gif_GetColor(Gif_Stream *gfs, Gif_Image *img, int x, int y, uint8_t *i
 // Netscape gray
 #define GIF_BACKGROUND 0xB3
 
-Gif_Renderer *Gif_RendererCreate(Gif_Stream *gfs) {
+Gif_Renderer *Gif_RendererCreate(Gif_Stream *gfs, int w, int h) {
   Gif_Renderer *renderer = malloc(sizeof(Gif_Renderer));
   
   renderer->gfs = gfs;
+  renderer->width = w;
+  renderer->height = h;
   
-  int width = Gif_ScreenWidth(gfs);
-  int height = Gif_ScreenHeight(gfs);
+  int width = Gif_ScreenWidth(renderer->gfs);
+  int height = Gif_ScreenHeight(renderer->gfs);
   
-  renderer->imageData = calloc(width * height * 3, sizeof(uint8_t));
-  renderer->scratchData = calloc(width * height * 3, sizeof(uint8_t));
+  int minD = MIN(width, height);
+  renderer->dx = (width  - minD) / 2;
+  renderer->dy = (height - minD) / 2;
   
-  memset(renderer->imageData, GIF_BACKGROUND, width * height * 3);
-  memset(renderer->scratchData, GIF_BACKGROUND, width * height * 3);
+  renderer->scale = MAX((float)w / minD, (float)h / minD);
+  
+  printf("w %d h %d min %d scale %f dx %d dy %d\n", width, height, minD, renderer->scale, renderer->dx, renderer->dy);
+  
+  renderer->imageData = calloc(renderer->width * renderer->height * 3, sizeof(uint8_t));
+  renderer->scratchData = calloc(renderer->width * renderer->height * 3, sizeof(uint8_t));
+  
+  memset(renderer->imageData, GIF_BACKGROUND, renderer->width * renderer->height * 3);
+  memset(renderer->scratchData, GIF_BACKGROUND, renderer->width * renderer->height * 3);
   
   renderer->frame = 0;
   renderer->nextFrameWait = 0;
@@ -56,27 +66,24 @@ Gif_Renderer *Gif_RendererCreate(Gif_Stream *gfs) {
 }
 
 void Gif_RendererSetPixel(Gif_Renderer *gr, uint8_t *buf, int x, int y, uint8_t r, uint8_t g, uint8_t b) {
-  int width  = Gif_ScreenWidth(gr->gfs);
-  int height = Gif_ScreenHeight(gr->gfs);
-  
-  if (x < 0 || x >= width || y < 0 || y >= height)
+  if (x < 0 || x >= gr->width || y < 0 || y >= gr->height)
     return;
   
-  buf[y * width * 3 + x * 3]     = r;
-  buf[y * width * 3 + x * 3 + 1] = g;
-  buf[y * width * 3 + x * 3 + 2] = b;
+  // int xpx = gr->dx + x / gr->scale;
+  // int ypx = gr->dy + y / gr->scale;
+  
+  buf[y * gr->width * 3 + x * 3]     = r;
+  buf[y * gr->width * 3 + x * 3 + 1] = g;
+  buf[y * gr->width * 3 + x * 3 + 2] = b;
 }
 
 void Gif_RendererGetPixel(Gif_Renderer *gr, uint8_t *buf, int x, int y, uint8_t *r, uint8_t *g, uint8_t *b) {
-  int width  = Gif_ScreenWidth(gr->gfs);
-  int height = Gif_ScreenHeight(gr->gfs);
-  
-  if (x < 0 || x >= width || y < 0 || y >= height)
+  if (x < 0 || x >= gr->width || y < 0 || y >= gr->height)
     return;
   
-  *r = buf[y * width * 3 + x * 3];
-  *g = buf[y * width * 3 + x * 3 + 1];
-  *b = buf[y * width * 3 + x * 3 + 2];
+  *r = buf[y * gr->width * 3 + x * 3];
+  *g = buf[y * gr->width * 3 + x * 3 + 1];
+  *b = buf[y * gr->width * 3 + x * 3 + 2];
 }
 
 void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
@@ -90,18 +97,15 @@ void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
   uint8_t isTransparent = 0;
   uint8_t r, g, b;
   
-  int width = Gif_ScreenWidth(gr->gfs);
-  int height = Gif_ScreenHeight(gr->gfs);
-  
-  for (int y = 0; y < img->height; y++) {
-    for (int x = 0; x < img->width; x++) {
-      int xpx = x + img->left;
-      int ypx = y + img->top;
+  for (int y = 0; y < gr->height; y++) {
+    for (int x = 0; x < gr->width; x++) {
+      int xpx = x / gr->scale - img->left + gr->dx;
+      int ypx = y / gr->scale - img->top  + gr->dy;
       
-      if (xpx >= width || ypx >= height) {
+      if (xpx >= img->width || ypx >= img->height || xpx < img->left || ypx < img->top) {
         isTransparent = 1;
       } else {
-        Gif_Color col = Gif_GetColor(gr->gfs, img, x, y, &isTransparent);
+        Gif_Color col = Gif_GetColor(gr->gfs, img, xpx, ypx, &isTransparent);
         r = col.gfc_red;
         g = col.gfc_green;
         b = col.gfc_blue;
@@ -110,19 +114,19 @@ void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
       if (isTransparent)
       {
         // use last rendered pixel at this location
-        Gif_RendererGetPixel(gr, gr->scratchData, xpx, ypx, &r, &g, &b);
+        Gif_RendererGetPixel(gr, gr->scratchData, x, y, &r, &g, &b);
       }
       
-      Gif_RendererSetPixel(gr, gr->imageData, xpx, ypx, r, g, b);
+      Gif_RendererSetPixel(gr, gr->imageData, x, y, r, g, b);
       
       switch (img->disposal) {
         case GIF_DISPOSAL_ASIS:
           // set scratch to current value
-          Gif_RendererSetPixel(gr, gr->scratchData, xpx, ypx, r, g, b);
+          Gif_RendererSetPixel(gr, gr->scratchData, x, y, r, g, b);
           break;
         case GIF_DISPOSAL_BACKGROUND:
           // set scratch to background
-          Gif_RendererSetPixel(gr, gr->scratchData, xpx, ypx, GIF_BACKGROUND, GIF_BACKGROUND, GIF_BACKGROUND);
+          Gif_RendererSetPixel(gr, gr->scratchData, x, y, GIF_BACKGROUND, GIF_BACKGROUND, GIF_BACKGROUND);
           break;
         case GIF_DISPOSAL_NONE:
         case GIF_DISPOSAL_PREVIOUS:

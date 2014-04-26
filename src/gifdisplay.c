@@ -111,14 +111,11 @@ void BMPRelease(BMP bmp) {
 
 // scale and crop the gif to a given size, output bitmaps
 void scaleCropHandler(Gif_Renderer *gr) {
-  int sz = 128;
+  int sz = 64;
   
-  int width = Gif_ScreenWidth(gr->gfs);
-  int height = Gif_ScreenHeight(gr->gfs);
-  
-  int minD = MIN(width, height);
-  int dx = (width  - minD) / 2;
-  int dy = (height - minD) / 2;
+  int minD = MIN(gr->width, gr->height);
+  int dx = (gr->width  - minD) / 2;
+  int dy = (gr->height - minD) / 2;
   
   float scale = (float)sz / minD;
   
@@ -143,14 +140,11 @@ void scaleCropHandler(Gif_Renderer *gr) {
 
 // render the whole gif to bitmaps
 void simpleHandler(Gif_Renderer *gr) {
-  int width = Gif_ScreenWidth(gr->gfs);
-  int height = Gif_ScreenHeight(gr->gfs);
-  
-  BMP bitmap = BMPCreate(width, height);
+  BMP bitmap = BMPCreate(gr->width, gr->height);
   
   uint8_t r, g, b;
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
+  for (int y = 0; y < gr->height; y++) {
+    for (int x = 0; x < gr->width; x++) {
       Gif_RendererGetPixel(gr, gr->imageData, x, y, &r, &g, &b);
       BMPSetPixel(bitmap, x, y, r, g, b);
     }
@@ -203,7 +197,7 @@ int main(int argc, char *argv[])
   printf("Displaying %s\n(%d x %d, %d frames)\n", name, Gif_ScreenWidth(gfs), Gif_ScreenHeight(gfs), Gif_ImageCount(gfs));
   
   int ms_per_tick = 5;
-  Gif_Renderer *gr = Gif_RendererCreate(gfs);
+  Gif_Renderer *gr = Gif_RendererCreate(gfs, 128, 128);
   while (!stop) {
     Gif_RendererTick(gr, ms_per_tick, scaleCropHandler);
     usleep(ms_per_tick * 1000);
