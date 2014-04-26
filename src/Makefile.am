@@ -27,7 +27,7 @@ gifview_SOURCES = clp.c fmalloc.c \
 		gifview.c
 
 gifdisplay_SOURCES = clp.c fmalloc.c \
-		giffunc.c gifread.c	gifdisplay.c
+		giffunc.c gifread.c	gifdisplay.c gifrenderer.c
 
 gifdiff_SOURCES = clp.c fmalloc.c \
 		giffunc.c gifread.c \
