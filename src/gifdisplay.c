@@ -1,11 +1,16 @@
-#include <lcdfgif/gif.h>
+#ifndef _BSD_SOURCE
+// or -D _BSD_SOURCE or whatever http://stackoverflow.com/questions/10053788/implicit-declaration-of-function-usleep
+#define _BSD_SOURCE
+#endif
+
+#include <gifrenderer.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
 #include <math.h>
 #include <unistd.h>
-#include <gifrenderer.h>
+#include <signal.h>
 
 const char *program_name = "gifdisplay";
 

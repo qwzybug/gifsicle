@@ -1,6 +1,11 @@
 #ifndef __GIFRENDERER_H__
 #define __GIFRENDERER_H__
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
+#include <inttypes.h>
 #include <lcdfgif/gif.h>
 
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
