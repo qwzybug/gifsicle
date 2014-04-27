@@ -1,6 +1,7 @@
 #include <gifrenderer.h>
 
 #include <string.h>
+#include <math.h>
 
 Gif_Color Gif_GetColorFromColorMap(Gif_Colormap *map, uint8_t val) {
   Gif_Color color;
@@ -11,17 +12,19 @@ Gif_Color Gif_GetColorFromColorMap(Gif_Colormap *map, uint8_t val) {
 
 Gif_Color Gif_GetColor(Gif_Stream *gfs, Gif_Image *img, int x, int y, uint8_t *isTransparent) {
   Gif_Color color;
+  *isTransparent = 1;
   
   uint8_t val = img->img[y][x];
   
-  *isTransparent = 0;
   if (img->transparent >= 0 && val == img->transparent) {
     *isTransparent = 1;
   }
   else if (img->local) {
+    *isTransparent = 0;
     color = Gif_GetColorFromColorMap(img->local, val);
   }
   else if (gfs->global) {
+    *isTransparent = 0;
     color = Gif_GetColorFromColorMap(gfs->global, val);
   }
   
@@ -32,8 +35,8 @@ Gif_Color Gif_GetColor(Gif_Stream *gfs, Gif_Image *img, int x, int y, uint8_t *i
  * GIF renderer: render a GIF, call a handler each frame
  */
 
-// Netscape gray
-#define GIF_BACKGROUND 0xB3
+// Netscape gray 0xB3
+#define GIF_BACKGROUND 0xFF
 
 Gif_Renderer *Gif_RendererCreate(Gif_Stream *gfs, int w, int h) {
   Gif_Renderer *renderer = malloc(sizeof(Gif_Renderer));
@@ -97,12 +100,15 @@ void Gif_RendererTick(Gif_Renderer *gr, int ms, Gif_Handler handler) {
   uint8_t isTransparent = 0;
   uint8_t r, g, b;
   
+  if (gr->frame == 0)
+    memset(gr->scratchData, GIF_BACKGROUND, gr->width * gr->height * 3);
+  
   for (int y = 0; y < gr->height; y++) {
     for (int x = 0; x < gr->width; x++) {
-      int xpx = x / gr->scale - img->left + gr->dx;
-      int ypx = y / gr->scale - img->top  + gr->dy;
+      int xpx = roundf(x / gr->scale) - img->left + gr->dx;
+      int ypx = roundf(y / gr->scale) - img->top  + gr->dy;
       
-      if (xpx >= img->width || ypx >= img->height || xpx < img->left || ypx < img->top) {
+      if (xpx >= img->width || ypx >= img->height || xpx < 0 || ypx < 0) {
         isTransparent = 1;
       } else {
         Gif_Color col = Gif_GetColor(gr->gfs, img, xpx, ypx, &isTransparent);
